@@ -12,7 +12,7 @@ sub ExtUtils::MM_Any::test_via_harness
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
-	'VERSION'       => '0.11',
+	'VERSION'       => '0.12',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
