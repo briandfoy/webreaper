@@ -1,12 +1,10 @@
 # $Id
 
-use Test::More tests => 2;
-
-use Test::File;
+use Test::More tests => 1;
 
 my $file = 'blib/script/webreaper';
 
-print "bail out! Script file is missing!" unless file_exists_ok( $file );
+print "bail out! Script file is missing!" unless -e $file;
 
 my $output = `perl -c $file 2>&1`;
 
