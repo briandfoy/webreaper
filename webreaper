@@ -3,10 +3,13 @@
 use strict;
 
 use ExtUtils::Command qw(mkpath);
+use Getopt::Std;
 use File::Basename qw(dirname);
 use File::Spec::Functions qw(catfile);
 use HTML::SimpleLinkExtor;
-use LWP::Simple;
+use LWP::UserAgent;
+use MIME::Base64 qw(encode_base64);
+use HTTP::Cookies;
 use URI;
 
 =head1 NAME
@@ -67,12 +70,25 @@ You may use this program under the same terms as Perl itself.
 
 =cut
 
-@ARGV = qw(https://hosta.atsc.eustis.army.mil/atdl/docs/accp/pa0100/TOC.htm);
+my @start = ( $ARGV[-1] );
 
-my @start = ( $ARGV[0] );
+my %Referers;
+my $cookie_jar = HTTP::Cookies->new();
 
 my $Domain = lc URI->new( $start[0] )->host;
 print "Domain is $Domain\n";
+
+my %opts;
+getopt('up', \%opts);
+
+print "User is $opts{u}\n" if 0;
+print "Password is $opts{p}\n" if 0;
+
+my $authorization = 0; #MIME::Base64::encode_base64( join ":", @opts{qw(u p)} );
+
+my $UA = LWP::UserAgent->new;
+$UA->agent( "Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)" );
+$UA->cookie_jar( $cookie_jar );
 
 my %Seen;
 while( @start )
@@ -82,28 +98,59 @@ while( @start )
 	next if exists $Seen{ $url };
 	next if $url =~ m/^javascript:/;
 
-	print "Processing $url\n";
+	my $url_o = URI->new( $url );
+	my $host = $url_o->host;
+	
+	print "Processing $url\nhost is $host\n" if 1;
 
-	my $data = get( $url );
-	store( \$data, $url );
+	my $request = HTTP::Request->new( GET => $url );
+	$request->authorization_basic( $authorization ) if $authorization;
+	$request->referer( $Referers{$url} ) if defined $Referers{$url};
+	$request->header( 'Accept-Language' => 'en' );
+	$request->header( 'Connection'      => 'close' );
+	$request->header( 'Accept'          => 'image/png, image/jpeg;q=0.9, image/pjpeg;q=0.9, image/gif;q=0.8, image/x-xbitmap;q=0.5, image/xbm;q=0.5, text/html, text/plain;q=0.8, */*;q=0.1' );
+	$request->header( 'Host'            => $host );
+	$request->header( 'User-Agent'      => 'Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)' );
+	
+	print $request->as_string;
+	print "-" x 73, "\n";
+	<STDIN>;
+	my $response = $UA->request( $request );
+
+	my $data = $response->content_ref;
+	
+	store( $data, $url );
 
 	$Seen{ $url }++;
 
-	my $extor = HTML::SimpleLinkExtor->new( $url );
- 	$extor->parse( $data );
-
- 	push @start,
- 		map { $_->[1] }
- 		grep {
- 			not exists $Seen{ $_->[1] } and
- 			$Domain eq $_->[0]
- 			}
- 		map {
- 			eval {
- 				my $domain = lc URI->new( $_ )->host;
- 				$domain ? [ $domain, $_ ] : ();
- 				} || ();
- 			} $extor->links;
+	my $text = $response->as_string;
+	
+	my $base = $response->base;
+	print "Base is $base\n";
+	
+	if( $response->content_type eq 'text/html' )
+		{
+		print "Extracting links...\n";
+		my $extor = HTML::SimpleLinkExtor->new( $base );
+		$extor->parse( $$data );
+	
+		push @start,
+			map { $Referers{ $_->[1] } = $url; $_->[1] }
+			grep {
+				not exists $Seen{ $_->[1] }; #and
+				#$Domain eq $_->[0]
+				}
+			map {
+				eval {
+					my $domain = lc URI->new( $_ )->host;
+					#print "Domain is $domain\n";
+					$domain ? [ $domain, $_ ] : ();
+					} || ();
+				} $extor->links;
+				
+		print "Queue is now " . @start . "\n";
+		}
+		
  	}
 
  sub store
@@ -131,6 +178,8 @@ while( @start )
 
 	mkpath unless -d $dir;
 
+	print "Path is $path\n";
+	
 	my $fh;
 	unless( open $fh, "> $path" )
 		{
@@ -140,4 +189,5 @@ while( @start )
 
 	print $fh $$data_ref;
 	close $fh;
+	print "File saved\n";
 	}
