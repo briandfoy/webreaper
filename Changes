@@ -1,5 +1,10 @@
 # $Id$
 
+0.25 - Fri Feb 20 15:12:12 2004
+	* stay under path of original URL
+	* optionally sleep between requests
+	* optionally create a tar archive at end of run
+
 0.20 - Wed Dec  3 15:16:32 2003
 	+ Referer support for all requests
 	+ Cookie jar support
