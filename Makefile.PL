@@ -17,11 +17,12 @@ unless( $@ )
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
-	'VERSION'       => '0.30',
+	'VERSION'       => '0.31',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
 	'PREREQ_PM' => {
+		'HTML::SimpleLinkExtor' => '0',
 		},
 
 	'MAN1PODS' => {
