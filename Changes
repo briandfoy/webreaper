@@ -1,5 +1,9 @@
 # $Id$
 
+0.31 - Sat Sep 25 18:38:34 2004
+* Fixed error in path processing when the script intends to stay under
+a certain URL.
+
 0.30 - Sat Feb 28 08:36:30 2004
 * new options for limiting requests, storing in flat dir, create zip archive
 * lots of clean-ups and refactoring to make everything easier to read
