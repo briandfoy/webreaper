@@ -3,14 +3,20 @@
 use strict;
 
 use Benchmark;
+use Carp;
+use Data::Dumper;
 use ExtUtils::Command qw(mkpath);
 use File::Basename qw(dirname);
+use File::Find;
 use File::Spec::Functions qw(catfile);
+use FindBin;
 use Getopt::Std;
 use HTML::SimpleLinkExtor;
 use HTTP::Cookies;
+use HTTP::Status qw(status_message);
 use LWP::UserAgent;
 use MIME::Base64 qw(encode_base64);
+use Socket;
 use URI;
 
 =head1 NAME
@@ -27,25 +33,70 @@ THIS IS ALPHA SOFTWARE
 
 The webreaper program downloads web sites.  It creates a directory,
 named after the host of the URL given on the command line, in the
-current working directory.
+current working directory, and will optionally create a tarball of
+it.
+
+=head2 Getting around web site misfeatures
+
+This script has many features to make it look like a normal, interaction
+web browser.  You can set values for some features, or use the defaults,
+enumerated later.
+
+Set the user-agent string with the -a switch.  Some web sites
+refuse to work with certain browsers because they want you to use
+Internet Explorer.  While webreaper is not subject to javascript
+checks (except for ones that try to redirect you), some servers try
+that behind-the-scenes.
+
+Set the referer [sic] string.  Some sites limit what you can see based
+on how they think you got to the address (i.e. they want you to click
+on a certain link).  The script automatically sets the referer strings
+for links it finds in web pages, but you can set the referer for the
+first link (the one you specify on the command line) with the -r switch.
+
+=head2 Basic browser features
+
+For websites that use a login and password, use the -u and -p switches.
+This feature is still a bit broken because it sends the authorization
+string for every address.
+
+=head2 Script features
+
+Watch the action by turning on verbose messages with the -v switch.  If
+you run this script from another script, cron, or some other automated
+method, you probably want no output, so do not use -v.  You can also
+set the WEBREAPER_VERBOSE environment variable.
+
+To get even more output, use the -d switch to turn on debugging output.
+You can also set the WEBREAPER_DEBUG varaible.
+
+You can create a single file of everything that you download by creating
+an archive with the -t switch, which creates a tarball.
+
+The script limits its traversal to URLs below the starting URL.  This may
+change in the future.
 
 =head2 Command line switches
 
 =over 4
 
-=item -c --- list of file types to include (not yet implemented)
+=item -a --- set the user agent string (takes an argument)
 
-=item -C --- list of file types to exclude (not yet implemented)
+=item -c --- list of file extensions to include (not yet implemented)
 
-=item -f --- take URLs from file (not yet implemented)
+=item -C --- list of file extensions to exclude (not yet implemented)
+
+=item -d --- turn on debugging output
+
+=item -h --- allowed hosts, comma separated
 
 =item -r --- referer for the first URL
 
 =item -p --- password for basic auth
 
-=item -s --- sleep between requests (not yet implemented)
+=item -s --- sleep between requests
 
-=item -t --- create tar archive (not yet implemented)
+=item -t --- create tar archive
 
 =item -u --- username for basic auth
 
@@ -53,7 +104,12 @@ current working directory.
 
 =back
 
-=head2 FEATURES SO FAR
+=head2 Examples
+
+# scrape a site, with a randomizing pause between requests
+webreaper -s 10 http://www.example.com
+
+=head2 Features so far
 
 =over 4
 
@@ -61,7 +117,7 @@ current working directory.
 
 =back
 
-=head2 WISH LIST
+=head2 Wish list
 
 =over 4
 
@@ -91,8 +147,6 @@ current working directory.
 
 =item specify directory where to save downloads
 
-=item optional sleep time between requests
-
 =item ensure that path names are safe (i.e. no ..)
 
 =back
@@ -102,7 +156,7 @@ current working directory.
 This source is part of a SourceForge project which always has the
 latest sources in CVS, as well as all of the previous releases.
 
-	https://sourceforge.net/projects/brian-d-foy/
+	http://sourceforge.net/projects/brian-d-foy/
 
 If, for some reason, I disappear from the world, one of the other
 members of the project can shepherd this module appropriately.
@@ -113,131 +167,246 @@ brian d foy, E<lt>bdfoy@cpan.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2003, brian d foy, All rights reserved.
+Copyright 2003-4, brian d foy, All rights reserved.
 
 You may use this program under the same terms as Perl itself.
 
 =cut
 
-my %Allowed = map { $_, 1 } qw(
- 	);
-	
-my @start = ( $ARGV[-1] );
+my $Script  = $FindBin::Script;
 
 my %Referers;
+my %Allowed;
+my %Directories;
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my $cookie_jar = HTTP::Cookies->new();
 
-my $Domain = lc URI->new( $start[0] )->host;
-$Allowed{$Domain} = 1;
-print "Domain is $Domain\n";
-
 my %opts;
-getopt('upr', \%opts);
+getopts('a:dh:p:r:s:tu:v', \%opts);
 
-my $Verbose = defined $opts{v} ? 1 : 0;
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+my $Verbose = defined $opts{v} || $ENV{WEBREAPER_VERBOSE} || 0;
+my $Debug   = defined $opts{d} || $ENV{WEBREAPER_DEBUG} || 0;
+
+print_debug( "Options are", Data::Dumper::Dumper( %opts ) ) if $Debug;
+print "Debug is $Debug\n";
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+if( defined $opts{h} and $opts{h} )
+	{
+	foreach my $domain ( split /,/, $opts{h} )
+		{
+		add_allowed_domain( $domain );
+		}
+	}
+	
+my $Url    = URI->new( $ARGV[-1] );
+my @start  = ( $Url );
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+my $Domain = lc $Url->host;
+$Domain    = add_allowed_domain( $Domain );
+print "Domain is $Domain\n"               if $Debug;
+
+my $Path   = $Url->path;
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my $authorization = MIME::Base64::encode_base64( join ":", @opts{qw(u p)} )
 	if defined $opts{u} && defined $opts{p};
+print "User is $opts{u}\n"                if $Debug;
+print "Password is $opts{p}\n"            if $Debug;
+print "Authorization is $authorization\n" if $Debug;
+print "Sleep is $opts{s}\n"               if $Debug;
 
-print "User is $opts{u}\n" if $Verbose;
-print "Password is $opts{p}\n" if $Verbose;
-print "Referer is $opts{r}\n" if $Verbose;
-print "Authorization is $authorization\n" if $Verbose;
-
-$Referers{$start[0]} = $opts{r} if defined $opts{r};
-
-my $referer_host = URI->new( $opts{r} )->host if $opts{r};
-print "Referer host is $referer_host\n" if $Verbose;
-$Allowed{ $referer_host } = 1;
-
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+if( defined $opts{r} and $opts{r} )
+	{
+	print "Referer is $opts{r}\n"                   if $Debug;
+	$Referers{$start[0]} = $opts{r};
+	my $referer_host = URI->new( $opts{r} )->host;
+	print "Referer host is $referer_host\n"         if $Debug;
+	$Allowed{ $referer_host } = 1;
+	}
+	
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
+print "User Agent is $opts{a}\n"             if $Debug;
+my $User_agent = $opts{a} || $ENV{WEBREAPER_UA} ||
+	q|Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)|;
 
 my $UA = LWP::UserAgent->new;
-$UA->agent( "Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)" );
+$UA->agent( $User_agent );
 $UA->cookie_jar( $cookie_jar );
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my %Stats;
 my %Seen;
+my @Domains = ( $Domain );
+my $count = 0;
 
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my $start = Benchmark->new();
-while( @start )
+URL: while( @start )
 	{
 	my $url = shift @start;
-	next if exists $Seen{ $url };
-	next if $url =~ m/^javascript:/;
-	$url =~ s/#.*//;
-	print "Processing $url --> " if $Verbose;
+	   $url = $url->canonical if ref $url;
 
-	my $request = make_request( $url );
-	
-	#print $request->as_string;
-	
-	#print "-" x 73, "\n";
-	#<STDIN>;
-	my $response = $UA->request( $request );
+	my $url_string = ref $url ? $url->as_string : $url;
 
+	next URL if exists $Seen{ $url_string };
+
+	$url_string =~ s/#.*//;
+	if( exists $Seen{ $url_string } )
+		{
+		print "\tSkipping [$url]: Seen $Seen{ $url_string } times\n" if $Debug;
+		next URL;
+		}
+
+	$Seen{ $url_string }++;
+			
+	printf "[%5d] $url_string... ", $count++ if $Verbose;
+
+	my $request   = make_request( $url );
+	my $response  = $UA->request( $request );
+
+	my $final_url = $response->request->uri->canonical->as_string;
+
+	$Seen{ $final_url }++;
+	print_debug( "Final is [$final_url]\n" ) if $Debug;
+
+	my $file = get_store_name( $final_url );
+	
 	my $data = $response->content_ref;
 	my $code = $response->code;
 	
 	print "$code\n" if $Verbose;
 	
-	$Stats{$code}++;
+	$Stats{codes}{$code}++;
 	
-	store( $data, $url );
-
-	$Seen{ $url }++;
-
-	my $text = $response->as_string;
+	next URL if $response->is_error;
+	
+	store( $data, $file ) if $file;
 	
 	my $base = $response->base;
 	
 	if( $response->content_type eq 'text/html' )
 		{
-		#print "Extracting links...\n";
+		print_debug( "Base is $base" ) if $Debug;
 		my $extor = HTML::SimpleLinkExtor->new( $base );
 		$extor->parse( $$data );
 	
 		push @start,
 			map { $Referers{ $_->[1] } = $url; $_->[1] }
 			grep {
-				not exists $Seen{ $_->[1] } and
-				exists $Allowed{ $_->[0] }
+				not exists $Seen{ $_->[1] }   and
+				exists $Allowed{ $_->[0] }    and
+				not $_->[1] =~ m/^javascript/ and
+				$_->[1]->path =~ m/^\Q$Path/ 
 				}
 			map {
 				eval {
-					my $domain = lc URI->new( $_ )->host;
-					#print "Domain is $domain\n";
-					$domain ? [ $domain, $_ ] : ();
+					my $url    = URI->new( $_ );
+					my $domain = lc $url->host;
+					$domain ? [ $domain, $url ] : ();
 					} || ();
 				} $extor->links;
 				
-		print "Queue is now " . @start . "\n" if $Verbose;
+		print "Queue is now " . @start . "\n" if $Debug;
 		}
-		
+
+	whoa() if $opts{'s'};
  	}
 my $stop = Benchmark->new;
 
-print "$0 ran for ", timestr( timediff($stop, $start) ), "\n" 
-	if $Verbose;
+my $Time = timestr( timediff( $stop, $start ) );
+
+print_debug( Data::Dumper::Dumper( %Stats ) ) if $Debug;
+
+print_summary() if $Verbose;
+	
+tar() if $opts{t};
+	
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+sub print_summary
+	{
+	my $rule = "-" x 73 . "\n";
+	print $rule;
+	print "$FindBin::Script: $Time\n";
+	print "\tstored $Stats{stored_files} files\n";
+	
+	foreach my $code ( sort { $a <=> $b } keys %{ $Stats{codes} } )
+		{
+		my $reason = status_message( $code );
+		printf "%5d: %d %-20s\n", $Stats{codes}{$code}, $code, $reason;
+		}
+	print $rule;
+	
+	}
+
+sub whoa
+	{
+	my $sleep = int rand( $opts{'s'} + 3 );
+	print_debug( "Sleeping $sleep seconds\n" ) if $Debug;
+	sleep $sleep;
+	}
+
+sub tar
+	{
+	require Archive::Tar;
+	
+	print "Domains is @Domains\n";
+	
+	my @files = ();
+	
+	find({
+		no_chdir => 1,
+		wanted   => sub { push @files, $_ if -f $_ },
+		}, @Domains );
+		
+		
+	my $compression = eval "IO::Zlib" ? 9 : 0;
+	my $extension   = $compression ? 'tgz' : 'tar';
+	Archive::Tar->create_archive( "$Domains[0].$extension", 9, @files );
+	}
+			
+sub add_allowed_domain
+	{
+	my $domain = shift;
+	
+	$Allowed{$domain}++;	
+
+	if( $domain =~ m/(?:[012]?\d\d?)(?:\.[012]?\d\d?){1,3}/ )
+		{
+		my $iaddr = inet_aton( $domain );
+		my $host = gethostbyaddr($iaddr, AF_INET);
+
+		print "Matched IP address [$domain|$host]\n";
+		$domain = $host;
+		}
+	
+	$domain;		
+	}
 	
 sub make_request
 	{
 	my $url = shift;
 	
-	my $url_o = URI->new( $url );
+	my $url_o = ref $url ? $url : URI->new( $url );
 	my $host = $url_o->host;
 		
-	my $request = HTTP::Request->new( GET => $url );
+	my $request = HTTP::Request->new( GET => $url_o );
 	
 	$request->authorization_basic( $opts{u}, $opts{p} ) if $authorization;
 	
 	$request->referer( "$Referers{$url}" ) if defined $Referers{$url};
 
-	$request->header( 'Accept-Language' => 'en' );
-	$request->header( 'Connection'      => 'close' );
-	$request->header( 'Accept'          => 
-		'image/png, image/jpeg;q=0.9, image/pjpeg;q=0.9, image/gif;q=0.8, image/x-xbitmap;q=0.5, image/xbm;q=0.5, text/html, text/plain;q=0.8, */*;q=0.1' );
-	$request->header( 'Host'            => $host );
-	$request->header( 'User-Agent'      => 
-		'Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)' );
+	$request->header( 'Accept-Language' => 'en'        );
+	$request->header( 'Connection'      => 'close'     );
+	$request->header( 'Accept'          => '*/*'       );
+	$request->header( 'Host'            => $host       );
+	$request->header( 'User-Agent'      => $User_agent );
 	
 	return $request;
 	}
@@ -246,58 +415,86 @@ sub make_request
 # XXX: store should remember the directories it creates so it 
 # can tar those later	
 # XXX: store needs to remember how many bytes it wrote
+sub get_store_name
+	{
+	my $url    = URI->new( shift );
+
+	my $domain = $url->host;
+	warn "No domain in $url\n" unless $domain;
+
+	my $path   = $url->path || '/';
+	print_debug( "Path is [$path]" ) if $Debug;
+	
+	if( $path =~ m|/$| )
+		{
+		print_debug( "Skipping path that looks like directory [$path]" )
+			if $Debug;
+		return;
+		}
+	
+	$path =~ s|/$|/index.html|;
+	$path =~ s|^/||;
+
+	$path =  catfile( $domain, $path );
+	
+	print_debug( "Store path is [$path]" ) if $Debug;
+	
+	return $path;
+	}
+	
 sub store
  	{
 	my $data_ref = shift;
-	my $url      = URI->new( shift );
+	my $file     = shift;
 
-	my $domain   = $url->host;
-	unless( $domain )
+	print_debug( "Saving [$file]" ) if $Debug;
+	
+	if( -d $file )
 		{
-		warn "No domain in $url\n";
-		}
-
-	my $path     = $url->path;
-
-	$path =~ s|^/||;
-	$path =~ s|/$|/index.html|;
-
-	if( -d $path )
-		{
-		print "Error: file path is already a directory [ $path ]\n";
+		print_debug( "Error: file path is already a directory [ $file ]" ) 
+			if $Debug;
 		return;
 		}
 		
-	$path =  catfile( $domain, $path );
-	my $dir = dirname $path;
-
-	#print "Directory is $dir\n";
+	my $dir = dirname $file;
+	print_debug( "Directory is $dir" ) if $Debug;
 
 	local @ARGV = ( $dir );
 
 	if( -e $dir and not -d $dir )
 		{
-		print "Error: Removing file that should be a dir [$dir]\n";
+		print_debug( "Error: Removing file that should be a dir [$dir]" ) 
+			if $Debug;
 		unlink $dir;
+		}
+	else
+		{
+		$Directories{$dir}++;
 		}
 		
 	eval { mkpath unless -e $dir };
 	if( $@ )
 		{
-		print "Error: mkpath could not make $dir: $@\n";
+		print_debug( "Error: mkpath could not make $dir: $@" ) 
+			if $Debug;
 		return;
 		}
-		
-	#print "Path is $path\n";
 	
 	my $fh;
-	unless( open $fh, "> $path" )
+	unless( open $fh, "> $file" )
 		{
-		warn "Could not open file [$path]: $!\n";
+		print_debug( "Could not open file [$file]: $!" ) 
+			if $Debug;
 		return;
 		}
 
 	print $fh $$data_ref;
 	close $fh;
-	#print "File saved\n";
+	
+	$Stats{stored_files}++;
+	}
+
+sub print_debug
+	{
+	print "!!!! " . join( "\n", @_ ) . "\n";
 	}
