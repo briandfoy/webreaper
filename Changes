@@ -1,5 +1,8 @@
 # $Id$
 
+0.12 - Fri Dec 13 12:39:05 2002
+	* Added Test::File to prerequisites, no code changes
+
 0.11 - Wed Dec 11 16:17:28 2002
 	* use the latest Test::Manifest which uses the latest ExtUtils
 
