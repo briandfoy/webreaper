@@ -23,4 +23,5 @@ WriteMakefile(
 		'Test::Pod'         => '0.90',
 		},
 
+	clean => { FILES => '*.bak webreaper-*' },
 	);
