@@ -295,7 +295,8 @@ my $Domain = lc $Url->host;
 $Domain    = add_allowed_domain( $Domain );
 print "Domain is $Domain\n"               if $Debug;
 
-my $Path   = $Url->path;
+my $Path   = dirname( $Url->path );
+print "Path is $Path\n"                   if $Debug;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my $authorization = encode_base64( join ":", @opts{qw(u p)} )
@@ -316,9 +317,9 @@ if( defined $opts{r} and $opts{r} )
 	}
 	
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-print "User Agent is $opts{a}\n"             if $Debug;
 my $User_agent = $opts{a} || $ENV{WEBREAPER_UA} ||
 	q|Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)|;
+print "User Agent is $opts{a}\n"             if $Debug;
 
 my $UA = LWP::UserAgent->new;
 $UA->agent( $User_agent );
@@ -354,7 +355,7 @@ URL: while( @start )
 
 	$Seen{ $url_string }++;
 			
-	printf "[%5d] $url_string ... ", $count++ if $Verbose;
+	printf "[%5d] %s ... ", $count++, $url_string if $Verbose;
 
 	my $request   = make_request( $url );
 	my $response  = $UA->request( $request );
@@ -417,6 +418,12 @@ sub extract_links
 	my $extor = HTML::SimpleLinkExtor->new( $base );
 	$extor->parse( $$data );
 
+	my @links = $extor->links;
+	print_debug( "Found " . @links . " links\n" ) if $Debug;
+	
+	use Data::Dumper;
+	print_debug( Dumper( \%Allowed ) ) if $Debug;
+
 	push @$urls,
 		map { $Referers{ $_->[1] } = $referer; $_->[1] }
 		grep {
@@ -432,8 +439,10 @@ sub extract_links
 				$domain ? [ $domain, $url ] : ();
 				} || ();
 			} $extor->links;
+
+	print_debug( "Found " . @$urls . " links that I kept\n" ) if $Debug;
 			
-	print "Queue is now " . @start . "\n" if $Debug;
+	print "Queue is now " . @$urls . "\n" if $Debug;
 	}
 	
 sub process_response
@@ -452,13 +461,13 @@ sub process_response
 	my $type   = $response->content_type;
 	my $server = $response->server;
 	
-	print "\n\tServer is $server ... " if $Verbose;
+	print "\n\tServer is $server ... " if $Debug;
 	print "$code\n" if $Verbose;
 	
 	$Stats{servers}{$server}++;
 	$Stats{codes}{$code}++;
 	
-	next URL if $response->is_error;
+	return if $response->is_error;
 	
 	# if Not-Modified, we don't store the file but we need to 
 	# get the links from the stored version, because those
