@@ -5,3 +5,4 @@ t/compile.t
 t/pod.t
 t/test_manifest
 webreaper
+META.yml                                 Module meta-data (added by MakeMaker)
