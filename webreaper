@@ -4,9 +4,10 @@ use strict;
 
 use Benchmark;
 use Carp;
+use Cwd qw( cwd );
 use Data::Dumper;
 use ExtUtils::Command qw(mkpath);
-use File::Basename qw(dirname);
+use File::Basename qw(basename dirname);
 use File::Find;
 use File::Spec::Functions qw(catfile);
 use FindBin;
@@ -16,16 +17,18 @@ use HTTP::Cookies;
 use HTTP::Status qw(status_message);
 use LWP::UserAgent;
 use MIME::Base64 qw(encode_base64);
+use POSIX;
 use Socket;
 use URI;
+use YAML;
 
 =head1 NAME
 
-webreaper -- download a page page and its links
+webreaper -- download a web page and its links
 
 =head1 SYNOPSIS
 
-	webreaper URL
+	webreaper [OPTIONS] URL
 
 =head1 DESCRIPTION
 
@@ -80,40 +83,120 @@ change in the future.
 
 =over 4
 
-=item -a --- set the user agent string (takes an argument)
+=item -a USER_AGENT
 
-=item -c --- list of file extensions to include (not yet implemented)
+set the user agent string
 
-=item -C --- list of file extensions to exclude (not yet implemented)
+=item -e
 
-=item -d --- turn on debugging output
+list of file extensions to store (not yet implemented)
 
-=item -h --- allowed hosts, comma separated
+=item -E
 
-=item -r --- referer for the first URL
+list of file extensions to skip (not yet implemented)
 
-=item -p --- password for basic auth
+=item -d
 
-=item -s --- sleep between requests
+turn on debugging output
 
-=item -t --- create tar archive
+=item -D DIRECTORY
 
-=item -u --- username for basic auth
+use this directory for downloads
 
-=item -v --- verbose ouput
+=item -f
+
+store all files in the same directory (flat)
+
+=item -h HOST1[,HOST2...]
+
+allowed hosts, comma separated.
+
+=item -n NUMBER
+
+stop after requesting NUMBER resources, whether or not webreaper stored them
+
+=item -N NUMBER
+
+stop after storing NUMBER resources
+
+=item -r REFERER_URL
+
+referer for the first URL
+
+=item -p PASSWORD
+
+password for basic auth
+
+=item -s SECONDS
+
+sleep between requests
+
+=item -t
+
+create tar archive
+
+=item -u USERNAME
+
+username for basic auth
+
+=item -v
+
+verbose ouput
+
+=item -z
+
+create a zip archive
 
 =back
 
 =head2 Examples
 
-# scrape a site, with a randomizing pause between requests
+=over 4
+
+=item scrape a site, with a randomizing pause between requests
+
 webreaper -s 10 http://www.example.com
 
-=head2 Features so far
+=item make a tar archive
+
+webreaper -t http://www.example.com
+
+=item make a zip archive
+
+webreaper -z http://www.example.com
+
+=item make a tar and a zip archive
+
+webreaper -t -z http://www.example.com
+
+=item set the user agent string
+
+webreaper -a "Mozilla 19.2 (Sony PlayStation)" http://www.example.com
+
+=item stop after making 10 requests or storing 5 files, whichever comes first
+
+webreaper -N 5 -n 10 http://www.example.com
+
+=back
+
+=head1 Environment variables
 
 =over 4
 
-=item limits itself to the starting domain
+=item WEBREAPER_DEBUG
+
+Show debugging output (implies verbose output). This is the same
+as the -d switch.
+
+=item WEBREAPER_VERBOSE
+
+Show progress information. This is the same as the -v switch.
+
+=item WEBREAPER_DIR
+
+Store downloads in this directory.  Script uses the current 
+working directory if this directory does not exist.  This is
+the same as the -D switch.
 
 =back
 
@@ -121,13 +204,9 @@ webreaper -s 10 http://www.example.com
 
 =over 4
 
-=item create tar archive when complete
-
-=item take URLs from a file
-
 =item limit directory level
 
-=item limit content types, file names
+=item limit content types, file names to store
 
 =item specify a set of patterns to ignore
 
@@ -145,11 +224,13 @@ webreaper -s 10 http://www.example.com
 
 =item allow user to add/delete allowed domains during runtime
 
-=item specify directory where to save downloads
-
 =item ensure that path names are safe (i.e. no ..)
 
 =back
+
+=head1 SEE ALSO
+
+lwp-rget (comes with LWP)
 
 =head1 SOURCE AVAILABILITY
 
@@ -180,17 +261,20 @@ my %Allowed;
 my %Directories;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-my $cookie_jar = HTTP::Cookies->new();
 
 my %opts;
-getopts('a:dh:p:r:s:tu:v', \%opts);
+getopts('a:dD:fh:n:N:p:r:s:tu:vz', \%opts);
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-my $Verbose = defined $opts{v} || $ENV{WEBREAPER_VERBOSE} || 0;
 my $Debug   = defined $opts{d} || $ENV{WEBREAPER_DEBUG} || 0;
+my $Verbose = defined $opts{v} || $ENV{WEBREAPER_VERBOSE} || $Debug || 0;
 
-print_debug( "Options are", Data::Dumper::Dumper( %opts ) ) if $Debug;
-print "Debug is $Debug\n";
+my $directory = $opts{D} || $ENV{WEBREAPER_DIR} || 
+	do { print "Using current working directory\n" if $Verbose; cwd };
+
+die "Could not change directory to $directory: $!" unless chdir $directory;
+
+print_debug( "Options are", YAML::Dump( \%opts ) ) if $Debug;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 if( defined $opts{h} and $opts{h} )
@@ -200,7 +284,9 @@ if( defined $opts{h} and $opts{h} )
 		add_allowed_domain( $domain );
 		}
 	}
-	
+
+die "I do not see a URL to process\n" unless @ARGV;
+
 my $Url    = URI->new( $ARGV[-1] );
 my @start  = ( $Url );
 
@@ -212,7 +298,7 @@ print "Domain is $Domain\n"               if $Debug;
 my $Path   = $Url->path;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-my $authorization = MIME::Base64::encode_base64( join ":", @opts{qw(u p)} )
+my $authorization = encode_base64( join ":", @opts{qw(u p)} )
 	if defined $opts{u} && defined $opts{p};
 print "User is $opts{u}\n"                if $Debug;
 print "Password is $opts{p}\n"            if $Debug;
@@ -236,16 +322,20 @@ my $User_agent = $opts{a} || $ENV{WEBREAPER_UA} ||
 
 my $UA = LWP::UserAgent->new;
 $UA->agent( $User_agent );
+
+my $cookie_jar = HTTP::Cookies->new();
 $UA->cookie_jar( $cookie_jar );
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my %Stats;
 my %Seen;
 my @Domains = ( $Domain );
-my $count = 0;
+my $count = 1;
+
+init_stats();
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-my $start = Benchmark->new();
+$Stats{start} = Benchmark->new();
 URL: while( @start )
 	{
 	my $url = shift @start;
@@ -264,11 +354,92 @@ URL: while( @start )
 
 	$Seen{ $url_string }++;
 			
-	printf "[%5d] $url_string... ", $count++ if $Verbose;
+	printf "[%5d] $url_string ... ", $count++ if $Verbose;
 
 	my $request   = make_request( $url );
 	my $response  = $UA->request( $request );
+	
+	my( $base, $type, $data ) = process_response( $response );
+	
+	next URL unless( defined $base and defined $type );
+	
+	extract_links( $data, $base, $url, \@start ) if( $type eq 'text/html' );
 
+	last URL if stop();
+	
+	whoa() if defined $opts{'s'};
+ 	}
+$Stats{stop} = Benchmark->new;
+
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+print_summary() if $Verbose;
+	
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+tar() if $opts{t};
+zip() if $opts{z};
+	
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+ # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
+# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
+sub stop
+	{
+	my $stop = do {
+		if( defined $opts{N} && $Stats{stored_files} >= $opts{N} )
+			{
+			print "Stopping after storing $opts{N} files\n";
+			1;
+			}
+		elsif( defined $opts{n} && $Stats{requests} >= $opts{n} )
+			{
+			print "Stopping after storing $opts{n} files\n";
+			1;
+			}
+		else
+			{
+			0
+			}
+		};	
+	
+	return $stop
+	}
+
+
+sub init_stats
+	{
+	@Stats{ qw(stored_files requests) } = ( 0, 0 );
+	}
+	
+sub extract_links
+	{
+	my( $data, $base, $referer, $urls ) = @_;
+	
+	print_debug( "Base is $base" ) if $Debug;
+	my $extor = HTML::SimpleLinkExtor->new( $base );
+	$extor->parse( $$data );
+
+	push @$urls,
+		map { $Referers{ $_->[1] } = $referer; $_->[1] }
+		grep {
+			not exists $Seen{ $_->[1] }   and
+			exists $Allowed{ $_->[0] }    and
+			not $_->[1] =~ m/^javascript/ and
+			$_->[1]->path =~ m/^\Q$Path/ 
+			}
+		map {
+			eval {
+				my $url    = URI->new( $_ );
+				my $domain = lc $url->host;
+				$domain ? [ $domain, $url ] : ();
+				} || ();
+			} $extor->links;
+			
+	print "Queue is now " . @start . "\n" if $Debug;
+	}
+	
+sub process_response
+	{
+	my $response = shift;
+	
 	my $final_url = $response->request->uri->canonical->as_string;
 
 	$Seen{ $final_url }++;
@@ -276,65 +447,42 @@ URL: while( @start )
 
 	my $file = get_store_name( $final_url );
 	
-	my $data = $response->content_ref;
-	my $code = $response->code;
+	my $data   = $response->content_ref;
+	my $code   = $response->code;
+	my $type   = $response->content_type;
+	my $server = $response->server;
 	
+	print "\n\tServer is $server ... " if $Verbose;
 	print "$code\n" if $Verbose;
 	
+	$Stats{servers}{$server}++;
 	$Stats{codes}{$code}++;
 	
 	next URL if $response->is_error;
 	
+	# if Not-Modified, we don't store the file but we need to 
+	# get the links from the stored version, because those
+	# resources might have changed
 	store( $data, $file ) if $file;
 	
 	my $base = $response->base;
 	
-	if( $response->content_type eq 'text/html' )
-		{
-		print_debug( "Base is $base" ) if $Debug;
-		my $extor = HTML::SimpleLinkExtor->new( $base );
-		$extor->parse( $$data );
+	return( $base, $type, $data );
+	}
 	
-		push @start,
-			map { $Referers{ $_->[1] } = $url; $_->[1] }
-			grep {
-				not exists $Seen{ $_->[1] }   and
-				exists $Allowed{ $_->[0] }    and
-				not $_->[1] =~ m/^javascript/ and
-				$_->[1]->path =~ m/^\Q$Path/ 
-				}
-			map {
-				eval {
-					my $url    = URI->new( $_ );
-					my $domain = lc $url->host;
-					$domain ? [ $domain, $url ] : ();
-					} || ();
-				} $extor->links;
-				
-		print "Queue is now " . @start . "\n" if $Debug;
-		}
-
-	whoa() if $opts{'s'};
- 	}
-my $stop = Benchmark->new;
-
-my $Time = timestr( timediff( $stop, $start ) );
-
-print_debug( Data::Dumper::Dumper( %Stats ) ) if $Debug;
-
-print_summary() if $Verbose;
-	
-tar() if $opts{t};
-	
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
- # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
-# # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
 sub print_summary
 	{
 	my $rule = "-" x 73 . "\n";
+
 	print $rule;
+	my $Time = timestr( timediff( @Stats{ qw(stop start) } ) );
+
 	print "$FindBin::Script: $Time\n";
-	print "\tstored $Stats{stored_files} files\n";
+	
+	my( $magnitude, $units ) = convert( $Stats{stored_bytes} );
+	printf "\trequested %d urls\n", $Stats{requests}; 
+	printf "\tstored %d files, %.2f %s\n", $Stats{stored_files}, 
+		$magnitude, $units;
 	
 	foreach my $code ( sort { $a <=> $b } keys %{ $Stats{codes} } )
 		{
@@ -345,6 +493,23 @@ sub print_summary
 	
 	}
 
+sub convert
+	{
+	my $number = shift;
+	my @units = qw(bytes kB MB GB);
+	
+	print "Number is $number\n" if $Debug;
+	my $nearest = floor( log( $number ) / log( 1024 ) );
+	print "Floor is $nearest\n" if $Debug;
+	
+	foreach my $index ( 1 .. $nearest )
+		{
+		$number /= 1024;
+		}
+		
+	return ( $number, $units[$nearest] )
+	}
+	
 sub whoa
 	{
 	my $sleep = int rand( $opts{'s'} + 3 );
@@ -354,9 +519,10 @@ sub whoa
 
 sub tar
 	{
-	require Archive::Tar;
+	eval "use Archive::Tar";
+	if( $@ ) { carp "You need Archive::Tar to create tar archives"; return }
 	
-	print "Domains is @Domains\n";
+	print "Domains is @Domains\n" if $Debug;
 	
 	my @files = ();
 	
@@ -370,7 +536,22 @@ sub tar
 	my $extension   = $compression ? 'tgz' : 'tar';
 	Archive::Tar->create_archive( "$Domains[0].$extension", 9, @files );
 	}
-			
+
+sub zip
+	{
+	eval "use Archive::Zip";
+	if( $@ ) { carp "You need Archive::Zip to create zip archives"; return }
+	
+	my $zip = Archive::Zip->new();
+
+	foreach my $domain ( @Domains )
+		{
+		$zip->addTree( $domain );
+		}
+		
+	$zip->writeToFileNamed( "$Domains[0].zip" );
+	}
+		
 sub add_allowed_domain
 	{
 	my $domain = shift;
@@ -408,6 +589,8 @@ sub make_request
 	$request->header( 'Host'            => $host       );
 	$request->header( 'User-Agent'      => $User_agent );
 	
+	$Stats{requests}++;
+	
 	return $request;
 	}
 
@@ -424,7 +607,16 @@ sub get_store_name
 
 	my $path   = $url->path || '/';
 	print_debug( "Path is [$path]" ) if $Debug;
-	
+
+	$path =~ s|/$|/index.html|;
+	$path =~ s|^/||;
+
+	if( defined $opts{f} )
+		{
+		my $name = basename( $path );
+		return catfile( $domain, $name );
+		}
+			
 	if( $path =~ m|/$| )
 		{
 		print_debug( "Skipping path that looks like directory [$path]" )
@@ -432,9 +624,6 @@ sub get_store_name
 		return;
 		}
 	
-	$path =~ s|/$|/index.html|;
-	$path =~ s|^/||;
-
 	$path =  catfile( $domain, $path );
 	
 	print_debug( "Store path is [$path]" ) if $Debug;
@@ -491,6 +680,7 @@ sub store
 	print $fh $$data_ref;
 	close $fh;
 	
+	$Stats{stored_bytes} += length $$data_ref;
 	$Stats{stored_files}++;
 	}
 
