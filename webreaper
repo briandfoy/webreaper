@@ -40,6 +40,8 @@ current working directory.
 
 =item -v --- verbose ouput
 
+=back
+
 =head2 FEATURES SO FAR
 
 =over 4
