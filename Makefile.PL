@@ -23,5 +23,9 @@ WriteMakefile(
 		'Test::Pod'         => '0.90',
 		},
 
+	'MAN1PODS' => {
+		'webreaper' => '$(INST_MAN1DIR)/webreaper.1',
+		},
+		
 	clean => { FILES => '*.bak webreaper-*' },
 	);
