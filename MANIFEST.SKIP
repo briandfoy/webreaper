@@ -7,3 +7,5 @@ MANIFEST.bak
 pm_to_blib
 .DS_Store
 MANIFEST.SKIP
+.cvsignore
+.releaserc
