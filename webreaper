@@ -34,9 +34,11 @@ current working directory.
 
 =item -r --- referer for the first URL
 
-=item -u --- username for basic auth (not supported yet)
+=item -u --- username for basic auth
 
-=item -p --- password for basic auth (not supported yet)
+=item -p --- password for basic auth
+
+=item -v --- verbose ouput
 
 =head2 FEATURES SO FAR
 
@@ -50,11 +52,31 @@ current working directory.
 
 =over 4
 
-=item use Basic username and password
-
 =item limit directory level
 
-=item limit content types
+=item limit content types, file names
+
+=item specify a set of patterns to ignore
+
+=item do conditional GETs
+
+=item Tk or curses interface?
+
+=item create an error log, report, or something
+
+=item download stats (clock time, storage space, etc)
+
+=item multiple levels of verbosity for output
+
+=item read items from a config file
+
+=item allow user to add/delete allowed domains during runtime
+
+=item specify directory where to save downloads
+
+=item optional sleep time between requests
+
+=item ensure that path names are safe (i.e. no ..)
 
 =back
 
@@ -74,13 +96,14 @@ brian d foy, E<lt>bdfoy@cpan.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2002, brian d foy, All rights reserved.
+Copyright 2003, brian d foy, All rights reserved.
 
 You may use this program under the same terms as Perl itself.
 
 =cut
+
 my %Allowed = map { $_, 1 } qw(
-	);
+ 	);
 	
 my @start = ( $ARGV[-1] );
 
@@ -88,41 +111,56 @@ my %Referers;
 my $cookie_jar = HTTP::Cookies->new();
 
 my $Domain = lc URI->new( $start[0] )->host;
-#$Allowed{$Domain} = 1;
+$Allowed{$Domain} = 1;
 print "Domain is $Domain\n";
 
 my %opts;
 getopt('upr', \%opts);
 
-print "User is $opts{u}\n";
-print "Password is $opts{p}\n";
-print "Referer is $opts{r}\n";
+my $Verbose = defined $opts{v} ? 1 : 0;
+my $authorization = MIME::Base64::encode_base64( join ":", @opts{qw(u p)} )
+	if defined $opts{u} && defined $opts{p};
+
+print "User is $opts{u}\n" if $Verbose;
+print "Password is $opts{p}\n" if $Verbose;
+print "Referer is $opts{r}\n" if $Verbose;
+print "Authorization is $authorization\n" if $Verbose;
 
 $Referers{$start[0]} = $opts{r} if defined $opts{r};
 
-my $authorization = 0; #MIME::Base64::encode_base64( join ":", @opts{qw(u p)} );
+my $referer_host = URI->new( $opts{r} )->host if $opts{r};
+print "Referer host is $referer_host\n" if $Verbose;
+$Allowed{ $referer_host } = 1;
+
 
 my $UA = LWP::UserAgent->new;
 $UA->agent( "Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)" );
 $UA->cookie_jar( $cookie_jar );
 
+my %Stats;
 my %Seen;
 while( @start )
 	{
 	my $url = shift @start;
-	print "Processing $url...\n";
-	$url =~ s/#.*//;
 	next if exists $Seen{ $url };
 	next if $url =~ m/^javascript:/;
+	$url =~ s/#.*//;
+	print "Processing $url --> " if $Verbose;
 
 	my $request = make_request( $url );
 	
 	#print $request->as_string;
+	
 	#print "-" x 73, "\n";
 	#<STDIN>;
 	my $response = $UA->request( $request );
 
 	my $data = $response->content_ref;
+	my $code = $response->code;
+	
+	print "$code\n" if $Verbose;
+	
+	$Stats{$code}++;
 	
 	store( $data, $url );
 
@@ -152,11 +190,12 @@ while( @start )
 					} || ();
 				} $extor->links;
 				
-		print "Queue is now " . @start . "\n";
+		print "Queue is now " . @start . "\n" if $Verbose;
 		}
 		
  	}
 
+	
 sub make_request
 	{
 	my $url = shift;
@@ -166,7 +205,7 @@ sub make_request
 		
 	my $request = HTTP::Request->new( GET => $url );
 	
-	$request->authorization_basic( $authorization ) if $authorization;
+	$request->authorization_basic( $opts{u}, $opts{p} ) if $authorization;
 	
 	$request->referer( "$Referers{$url}" ) if defined $Referers{$url};
 
@@ -197,6 +236,12 @@ sub store
 	$path =~ s|^/||;
 	$path =~ s|/$|/index.html|;
 
+	if( -d $path )
+		{
+		print "Error: file path is already a directory [ $path ]\n";
+		return;
+		}
+		
 	$path =  catfile( $domain, $path );
 	my $dir = dirname $path;
 
@@ -204,8 +249,19 @@ sub store
 
 	local @ARGV = ( $dir );
 
-	mkpath unless -e $dir;
-
+	if( -e $dir and not -d $dir )
+		{
+		print "Error: Removing file that should be a dir [$dir]\n";
+		unlink $dir;
+		}
+		
+	eval { mkpath unless -e $dir };
+	if( $@ )
+		{
+		print "Error: mkpath could not make $dir: $@\n";
+		return;
+		}
+		
 	#print "Path is $path\n";
 	
 	my $fh;
