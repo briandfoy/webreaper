@@ -1,4 +1,7 @@
 # $Id$
 
+0.11 - Wed Dec 11 16:17:28 2002
+	* use the latest Test::Manifest which uses the latest ExtUtils
+
 0.10 - Thu Dec  5 22:36:57 CST 2002
 	+ first alpha release -- everything is really sketchy
