@@ -2,14 +2,15 @@
 # $Id$
 use strict;
 
+use Benchmark;
 use ExtUtils::Command qw(mkpath);
-use Getopt::Std;
 use File::Basename qw(dirname);
 use File::Spec::Functions qw(catfile);
+use Getopt::Std;
 use HTML::SimpleLinkExtor;
+use HTTP::Cookies;
 use LWP::UserAgent;
 use MIME::Base64 qw(encode_base64);
-use HTTP::Cookies;
 use URI;
 
 =head1 NAME
@@ -32,11 +33,21 @@ current working directory.
 
 =over 4
 
+=item -c --- list of file types to include (not yet implemented)
+
+=item -C --- list of file types to exclude (not yet implemented)
+
+=item -f --- take URLs from file (not yet implemented)
+
 =item -r --- referer for the first URL
 
-=item -u --- username for basic auth
-
 =item -p --- password for basic auth
+
+=item -s --- sleep between requests (not yet implemented)
+
+=item -t --- create tar archive (not yet implemented)
+
+=item -u --- username for basic auth
 
 =item -v --- verbose ouput
 
@@ -53,6 +64,10 @@ current working directory.
 =head2 WISH LIST
 
 =over 4
+
+=item create tar archive when complete
+
+=item take URLs from a file
 
 =item limit directory level
 
@@ -141,6 +156,8 @@ $UA->cookie_jar( $cookie_jar );
 
 my %Stats;
 my %Seen;
+
+my $start = Benchmark->new();
 while( @start )
 	{
 	my $url = shift @start;
@@ -196,7 +213,10 @@ while( @start )
 		}
 		
  	}
+my $stop = Benchmark->new;
 
+print "$0 ran for ", timestr( timediff($stop, $start) ), "\n" 
+	if $Verbose;
 	
 sub make_request
 	{
@@ -221,7 +241,11 @@ sub make_request
 	
 	return $request;
 	}
-	
+
+# XXX: break this into a function that determines the filename
+# XXX: store should remember the directories it creates so it 
+# can tar those later	
+# XXX: store needs to remember how many bytes it wrote
 sub store
  	{
 	my $data_ref = shift;
