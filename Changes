@@ -1,11 +1,5 @@
 # $Id$
 
-0.25 - Sat Feb 28 08:25:55 2004
-	* new options to make zip archive, limit requests, store files in flat dir
-	* vrious docs clean-ups
-	* some refactoring
-	* better reporting at the end of the run
-
 0.25 - Fri Feb 20 15:12:12 2004
 	* stay under path of original URL
 	* optionally sleep between requests
