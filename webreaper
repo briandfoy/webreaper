@@ -1,0 +1,142 @@
+#!/usr/bin/perl -w
+use strict;
+
+use ExtUtils::Command qw(mkpath);
+use File::Basename qw(dirname);
+use File::Spec::Functions qw(catfile);
+use HTML::SimpleLinkExtor;
+use LWP::Simple;
+use URI;
+
+=head1 NAME
+
+webreaper -- download a page page and its links
+
+=head1 SYNOPSIS
+
+	webreaper URL 
+	
+=head1 DESCRIPTION
+
+THIS IS ALPHA SOFTWARE
+
+The webreaper program downloads web sites.  It creates a directory,
+named after the host of the URL given on the command line, in the 
+current working directory.
+
+=head2 FEATURES SO FAR
+
+=over 4
+
+=item limits itself to the starting domain
+
+=back
+
+=head2 WISH LIST
+
+=over 4
+
+=item use Basic username and password
+
+=item limit directory level
+
+=item limit content types
+
+=back
+
+=head1 SOURCE AVAILABILITY
+
+This source is part of a SourceForge project which always has the
+latest sources in CVS, as well as all of the previous releases.
+
+	https://sourceforge.net/projects/brian-d-foy/
+
+If, for some reason, I disappear from the world, one of the other
+members of the project can shepherd this module appropriately.
+
+=head1 AUTHOR
+
+brian d foy, E<lt>bdfoy@cpan.orgE<gt>
+
+=head1 COPYRIGHT
+
+Copyright 2002, brian d foy, All rights reserved.
+
+You may use this program under the same terms as Perl itself.
+
+=cut
+
+@ARGV = qw(https://hosta.atsc.eustis.army.mil/atdl/docs/accp/pa0100/TOC.htm);
+
+my @start = ( $ARGV[0] );
+
+my $Domain = lc URI->new( $start[0] )->host;
+print "Domain is $Domain\n";
+
+my %Seen;
+while( @start )
+	{
+	my $url = shift @start;
+	$url =~ s/#.*//;
+	next if exists $Seen{ $url };
+	next if $url =~ m/^javascript:/;
+	
+	print "Processing $url\n";
+	
+	my $data = get( $url );
+	store( \$data, $url );
+	
+	$Seen{ $url }++;
+	
+	my $extor = HTML::SimpleLinkExtor->new( $url );
+ 	$extor->parse( $data );
+ 	
+ 	push @start, 
+ 		map { $_->[1] }
+ 		grep { 
+ 			not exists $Seen{ $_->[1] } and
+ 			$Domain eq $_->[0]
+ 			} 
+ 		map { 
+ 			eval {
+ 				my $domain = lc URI->new( $_ )->host;
+ 				$domain ? [ $domain, $_ ] : ();
+ 				} || ();
+ 			} $extor->links;
+ 	}
+ 	
+ sub store
+ 	{
+	my $data_ref = shift;
+	my $url      = URI->new( shift );
+	
+	my $domain   = $url->host;
+	unless( $domain )
+		{
+		warn "No domain in $url\n";
+		}
+	
+	my $path     = $url->path;
+	
+	$path =~ s|^/||;
+	$path =~ s|/$|/index.html|;
+	
+	$path =  catfile( $domain, $path );
+	my $dir = dirname $path;
+	
+	print "Directory is $dir\n";
+	
+	local @ARGV = ( $dir );
+	
+	mkpath unless -d $dir;
+	
+	my $fh;
+	unless( open $fh, "> $path" )
+		{
+		warn "Could not open file [$path]: $!\n";
+		return;
+		}
+		
+	print $fh $$data_ref;
+	close $fh;
+	}
