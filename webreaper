@@ -14,14 +14,14 @@ webreaper -- download a page page and its links
 
 =head1 SYNOPSIS
 
-	webreaper URL 
-	
+	webreaper URL
+
 =head1 DESCRIPTION
 
 THIS IS ALPHA SOFTWARE
 
 The webreaper program downloads web sites.  It creates a directory,
-named after the host of the URL given on the command line, in the 
+named after the host of the URL given on the command line, in the
 current working directory.
 
 =head2 FEATURES SO FAR
@@ -80,63 +80,63 @@ while( @start )
 	$url =~ s/#.*//;
 	next if exists $Seen{ $url };
 	next if $url =~ m/^javascript:/;
-	
+
 	print "Processing $url\n";
-	
+
 	my $data = get( $url );
 	store( \$data, $url );
-	
+
 	$Seen{ $url }++;
-	
+
 	my $extor = HTML::SimpleLinkExtor->new( $url );
  	$extor->parse( $data );
- 	
- 	push @start, 
+
+ 	push @start,
  		map { $_->[1] }
- 		grep { 
+ 		grep {
  			not exists $Seen{ $_->[1] } and
  			$Domain eq $_->[0]
- 			} 
- 		map { 
+ 			}
+ 		map {
  			eval {
  				my $domain = lc URI->new( $_ )->host;
  				$domain ? [ $domain, $_ ] : ();
  				} || ();
  			} $extor->links;
  	}
- 	
+
  sub store
  	{
 	my $data_ref = shift;
 	my $url      = URI->new( shift );
-	
+
 	my $domain   = $url->host;
 	unless( $domain )
 		{
 		warn "No domain in $url\n";
 		}
-	
+
 	my $path     = $url->path;
-	
+
 	$path =~ s|^/||;
 	$path =~ s|/$|/index.html|;
-	
+
 	$path =  catfile( $domain, $path );
 	my $dir = dirname $path;
-	
+
 	print "Directory is $dir\n";
-	
+
 	local @ARGV = ( $dir );
-	
+
 	mkpath unless -d $dir;
-	
+
 	my $fh;
 	unless( open $fh, "> $path" )
 		{
 		warn "Could not open file [$path]: $!\n";
 		return;
 		}
-		
+
 	print $fh $$data_ref;
 	close $fh;
 	}
