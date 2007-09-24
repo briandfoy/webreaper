@@ -260,6 +260,8 @@ my %Referers;
 my %Allowed;
 my %Directories;
 
+$|++;
+
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 
 my %opts;
@@ -358,6 +360,7 @@ URL: while( @start )
 	printf "[%5d] %s ... ", $count++, $url_string if $Verbose;
 
 	my $request   = make_request( $url );
+	
 	my $response  = $UA->request( $request );
 	
 	my( $base, $type, $data ) = process_response( $response );
@@ -454,7 +457,11 @@ sub process_response
 	$Seen{ $final_url }++;
 	print_debug( "Final is [$final_url]\n" ) if $Debug;
 
+	return if $final_url =~ m/^file:/;
+	
 	my $file = get_store_name( $final_url );
+	
+	return if( -e $file && -s $file );
 	
 	my $data   = $response->content_ref;
 	my $code   = $response->code;
@@ -586,6 +593,16 @@ sub make_request
 	my $url_o = ref $url ? $url : URI->new( $url );
 	my $host = $url_o->host;
 		
+	my $store_name = File::Spec->rel2abs( get_store_name( $url_o->as_string ) );
+	
+	#print "Store name is $store_name\n";
+	
+	if( -e $store_name && -s $store_name )
+		{
+		print "Using localfile: $store_name\n";
+		$url_o = URI->new( "file://localhost/$store_name" );
+		}
+	
 	my $request = HTTP::Request->new( GET => $url_o );
 	
 	$request->authorization_basic( $opts{u}, $opts{p} ) if $authorization;

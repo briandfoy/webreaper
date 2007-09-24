@@ -18,6 +18,8 @@ unless( $@ )
 WriteMakefile(
     'NAME'		    => 'webreaper',
 	'VERSION'       => '0.31',
+	'LICENSE'		=> 'perl',
+	'AUTHOR'		=> 'brian d foy <bdfoy@cpan.org>',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
