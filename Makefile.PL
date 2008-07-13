@@ -1,6 +1,8 @@
 # $Id$
 use ExtUtils::MakeMaker;
 
+require 5.006;
+
 eval "use Test::Manifest";
 
 unless( $@ )
@@ -17,6 +19,7 @@ unless( $@ )
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
+	'ABSTRACT'      => 'Scrape entire websites',
 	'VERSION'       => '0.31',
 	'LICENSE'		=> 'perl',
 	'AUTHOR'		=> 'brian d foy <bdfoy@cpan.org>',
