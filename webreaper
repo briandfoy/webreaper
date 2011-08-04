@@ -308,8 +308,7 @@ print "Authorization is $authorization\n" if $Debug;
 print "Sleep is $opts{s}\n"               if $Debug;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-if( defined $opts{r} and $opts{r} )
-	{
+if( defined $opts{r} and $opts{r} ) {
 	print "Referer is $opts{r}\n"                   if $Debug;
 	$Referers{$start[0]} = $opts{r};
 	my $referer_host = URI->new( $opts{r} )->host;
@@ -338,8 +337,7 @@ init_stats();
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 $Stats{start} = Benchmark->new();
-URL: while( @start )
-	{
+URL: while( @start ) {
 	my $url = shift @start;
 	   $url = $url->canonical if ref $url;
 
@@ -348,8 +346,7 @@ URL: while( @start )
 	next URL if exists $Seen{ $url_string };
 
 	$url_string =~ s/#.*//;
-	if( exists $Seen{ $url_string } )
-		{
+	if( exists $Seen{ $url_string } ) {
 		print "\tSkipping [$url]: Seen $Seen{ $url_string } times\n" if $Debug;
 		next URL;
 		}
@@ -372,6 +369,7 @@ URL: while( @start )
 	
 	whoa() if defined $opts{'s'};
  	}
+
 $Stats{stop} = Benchmark->new;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
@@ -384,21 +382,17 @@ zip() if $opts{z};
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
  # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #  
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # 
-sub stop
-	{
+sub stop {
 	my $stop = do {
-		if( defined $opts{N} && $Stats{stored_files} >= $opts{N} )
-			{
+		if( defined $opts{N} && $Stats{stored_files} >= $opts{N} ) {
 			print "Stopping after storing $opts{N} files\n";
 			1;
 			}
-		elsif( defined $opts{n} && $Stats{requests} >= $opts{n} )
-			{
+		elsif( defined $opts{n} && $Stats{requests} >= $opts{n} ) {
 			print "Stopping after storing $opts{n} files\n";
 			1;
 			}
-		else
-			{
+		else {
 			0
 			}
 		};	
@@ -407,13 +401,11 @@ sub stop
 	}
 
 
-sub init_stats
-	{
+sub init_stats {
 	@Stats{ qw(stored_files requests) } = ( 0, 0 );
 	}
 	
-sub extract_links
-	{
+sub extract_links {
 	my( $data, $base, $referer, $urls ) = @_;
 	
 	print_debug( "Base is $base" ) if $Debug;
@@ -447,8 +439,7 @@ sub extract_links
 	print "Queue is now " . @$urls . "\n" if $Debug;
 	}
 	
-sub process_response
-	{
+sub process_response {
 	my $response = shift;
 	
 	my $final_url = $response->request->uri->canonical->as_string;
@@ -485,8 +476,7 @@ sub process_response
 	return( $base, $type, $data );
 	}
 	
-sub print_summary
-	{
+sub print_summary {
 	my $rule = "-" x 73 . "\n";
 
 	print $rule;
@@ -508,8 +498,7 @@ sub print_summary
 	
 	}
 
-sub convert
-	{
+sub convert {
 	my $number = shift;
 	my @units = qw(bytes kB MB GB);
 	
@@ -517,23 +506,20 @@ sub convert
 	my $nearest = floor( log( $number ) / log( 1024 ) );
 	print "Floor is $nearest\n" if $Debug;
 	
-	foreach my $index ( 1 .. $nearest )
-		{
+	foreach my $index ( 1 .. $nearest ) {
 		$number /= 1024;
 		}
 		
 	return ( $number, $units[$nearest] )
 	}
 	
-sub whoa
-	{
+sub whoa {
 	my $sleep = int rand( $opts{'s'} + 3 );
 	print_debug( "Sleeping $sleep seconds\n" ) if $Debug;
 	sleep $sleep;
 	}
 
-sub tar
-	{
+sub tar {
 	eval "use Archive::Tar";
 	if( $@ ) { carp "You need Archive::Tar to create tar archives"; return }
 	
@@ -552,29 +538,25 @@ sub tar
 	Archive::Tar->create_archive( "$Domains[0].$extension", 9, @files );
 	}
 
-sub zip
-	{
+sub zip {
 	eval "use Archive::Zip";
 	if( $@ ) { carp "You need Archive::Zip to create zip archives"; return }
 	
 	my $zip = Archive::Zip->new();
 
-	foreach my $domain ( @Domains )
-		{
+	foreach my $domain ( @Domains ) {
 		$zip->addTree( $domain );
 		}
 		
 	$zip->writeToFileNamed( "$Domains[0].zip" );
 	}
 		
-sub add_allowed_domain
-	{
+sub add_allowed_domain {
 	my $domain = shift;
 	
 	$Allowed{$domain}++;	
 
-	if( $domain =~ m/(?:[012]?\d\d?)(?:\.[012]?\d\d?){1,3}/ )
-		{
+	if( $domain =~ m/(?:[012]?\d\d?)(?:\.[012]?\d\d?){1,3}/ ) {
 		my $iaddr = inet_aton( $domain );
 		my $host = gethostbyaddr($iaddr, AF_INET);
 
@@ -585,8 +567,7 @@ sub add_allowed_domain
 	$domain;		
 	}
 	
-sub make_request
-	{
+sub make_request {
 	my $url = shift;
 	
 	my $url_o = ref $url ? $url : URI->new( $url );
@@ -596,8 +577,7 @@ sub make_request
 	
 	#print "Store name is $store_name\n";
 	
-	if( -e $store_name && -s $store_name )
-		{
+	if( -e $store_name && -s $store_name ) {
 		print "Using localfile: $store_name\n";
 		$url_o = URI->new( "file://localhost/$store_name" );
 		}
@@ -623,8 +603,7 @@ sub make_request
 # XXX: store should remember the directories it creates so it 
 # can tar those later	
 # XXX: store needs to remember how many bytes it wrote
-sub get_store_name
-	{
+sub get_store_name {
 	my $url    = URI->new( shift );
 
 	my $domain = $url->host;
@@ -636,14 +615,12 @@ sub get_store_name
 	$path =~ s|/$|/index.html|;
 	$path =~ s|^/||;
 
-	if( defined $opts{f} )
-		{
+	if( defined $opts{f} ) {
 		my $name = basename( $path );
 		return catfile( $domain, $name );
 		}
 			
-	if( $path =~ m|/$| )
-		{
+	if( $path =~ m|/$| ) {
 		print_debug( "Skipping path that looks like directory [$path]" )
 			if $Debug;
 		return;
@@ -656,15 +633,13 @@ sub get_store_name
 	return $path;
 	}
 	
-sub store
- 	{
+sub store {
 	my $data_ref = shift;
 	my $file     = shift;
 
 	print_debug( "Saving [$file]" ) if $Debug;
 	
-	if( -d $file )
-		{
+	if( -d $file ) {
 		print_debug( "Error: file path is already a directory [ $file ]" ) 
 			if $Debug;
 		return;
@@ -675,28 +650,24 @@ sub store
 
 	local @ARGV = ( $dir );
 
-	if( -e $dir and not -d $dir )
-		{
+	if( -e $dir and not -d $dir ) {
 		print_debug( "Error: Removing file that should be a dir [$dir]" ) 
 			if $Debug;
 		unlink $dir;
 		}
-	else
-		{
+	else {
 		$Directories{$dir}++;
 		}
 		
 	eval { mkpath unless -e $dir };
-	if( $@ )
-		{
+	if( $@ ) {
 		print_debug( "Error: mkpath could not make $dir: $@" ) 
 			if $Debug;
 		return;
 		}
 	
 	my $fh;
-	unless( open $fh, "> $file" )
-		{
+	unless( open $fh, "> $file" ) {
 		print_debug( "Could not open file [$file]: $!" ) 
 			if $Debug;
 		return;
@@ -709,7 +680,6 @@ sub store
 	$Stats{stored_files}++;
 	}
 
-sub print_debug
-	{
+sub print_debug {
 	print "!!!! " . join( "\n", @_ ) . "\n";
 	}
