@@ -1,33 +1,21 @@
-# $Id$
 use ExtUtils::MakeMaker;
 
-require 5.006;
+require 5.014;
 
-eval "use Test::Manifest";
-
-unless( $@ )
-	{
-	*ExtUtils::MM_Any::test_via_harness = sub
-	{
-    my($self, $perl, $tests) = @_;
-
-    return qq|\t$perl "-MTest::Manifest" | .
-           qq|"-e" "run_t_manifest(\$(TEST_VERBOSE), '\$(INST_LIB)', | .
-           qq|'\$(INST_ARCHLIB)')"\n|;
-	}
-	}
+eval "use Test::Manifest 0.21";
 
 WriteMakefile(
     'NAME'		    => 'webreaper',
 	'ABSTRACT'      => 'Scrape entire websites',
-	'VERSION'       => '0.31',
+	'VERSION'       => '1.01',
 	'LICENSE'		=> 'perl',
 	'AUTHOR'		=> 'brian d foy <bdfoy@cpan.org>',
 	
 	'EXE_FILES' =>  [ 'webreaper' ],
 	    	
 	'PREREQ_PM' => {
-		'HTML::SimpleLinkExtor' => '0',
+		'HTML::SimpleLinkExtor'  => '0',
+		'Mojolicious::UserAgent' => '0',
 		},
 
 	'MAN1PODS' => {
