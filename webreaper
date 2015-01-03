@@ -14,7 +14,7 @@ use Getopt::Std;
 use HTML::SimpleLinkExtor;
 use HTTP::Cookies;
 use HTTP::Status qw(status_message);
-use LWP::UserAgent;
+use Mojo::UserAgent;
 use MIME::Base64 qw(encode_base64);
 use POSIX;
 use Socket;
@@ -278,10 +278,8 @@ die "Could not change directory to $directory: $!" unless chdir $directory;
 print_debug( "Options are", YAML::Dump( \%opts ) ) if $Debug;
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
-if( defined $opts{h} and $opts{h} )
-	{
-	foreach my $domain ( split /,/, $opts{h} )
-		{
+if( defined $opts{h} and $opts{h} ) {
+	foreach my $domain ( split /,/, $opts{h} ) {
 		add_allowed_domain( $domain );
 		}
 	}
@@ -321,11 +319,7 @@ my $User_agent = $opts{a} || $ENV{WEBREAPER_UA} ||
 	q|Mozilla/4.5 (compatible; iCab 2.9.7; Macintosh; U; PPC; Mac OS X)|;
 print "User Agent is $opts{a}\n"             if $Debug;
 
-my $UA = LWP::UserAgent->new;
-$UA->agent( $User_agent );
-
-my $cookie_jar = HTTP::Cookies->new();
-$UA->cookie_jar( $cookie_jar );
+my $UA = make_user_agent( $User_agent );
 
 # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # # #
 my %Stats;
@@ -357,9 +351,9 @@ URL: while( @start ) {
 
 	my $request   = make_request( $url );
 	
-	my $response  = $UA->request( $request );
+	my $tx  = $UA->get( $request );
 	
-	my( $base, $type, $data ) = process_response( $response );
+	my( $base, $type, $data ) = process_response( $tx );
 	
 	next URL unless( defined $base and defined $type );
 	
@@ -440,9 +434,9 @@ sub extract_links {
 	}
 	
 sub process_response {
-	my $response = shift;
+	my $tx = shift;
 	
-	my $final_url = $response->request->uri->canonical->as_string;
+	my $final_url = $tx->request->uri->canonical->as_string;
 
 	$Seen{ $final_url }++;
 	print_debug( "Final is [$final_url]\n" ) if $Debug;
@@ -453,10 +447,14 @@ sub process_response {
 	
 	return if( -e $file && -s $file );
 	
-	my $data   = $response->content_ref;
-	my $code   = $response->code;
-	my $type   = $response->content_type;
-	my $server = $response->server;
+	my $reponse = $tx->res;
+	my $data    = $response->body; ##;
+	my $code    = $response->code; ##
+	
+	my $headers = $message->headers;
+
+	my $type    = $headers->content_type;
+	my $server  = $headers->server;
 	
 	print "\n\tServer is $server ... " if $Debug;
 	print "$code\n" if $Verbose;
@@ -566,6 +564,29 @@ sub add_allowed_domain {
 	
 	$domain;		
 	}
+
+sub make_user_agent {
+	my $name = shift;
+	
+	my $UA = Mojo::UserAgent->new;
+	$UA->name( $name );
+	$UA->cookie_jar( Mojo::CookieJar->new );
+
+	$ua->on_start( sub {
+		my( $ua, $tx ) = @_;
+		$tx->req->headers->accept_language('en');
+		$tx->req->headers->connection('close');
+		$tx->req->headers->header('Accept' => '*/*');
+		$tx->req->headers->header('X-Mojo' => 'Enabled');
+		
+		if( exists $Referers{$url} ) {
+			$tx->req->headers->referrer( $Referers{$url} );
+			}
+
+		} );
+		
+	$ua;
+	}
 	
 sub make_request {
 	my $url = shift;
@@ -585,14 +606,6 @@ sub make_request {
 	my $request = HTTP::Request->new( GET => $url_o );
 	
 	$request->authorization_basic( $opts{u}, $opts{p} ) if $authorization;
-	
-	$request->referer( "$Referers{$url}" ) if defined $Referers{$url};
-
-	$request->header( 'Accept-Language' => 'en'        );
-	$request->header( 'Connection'      => 'close'     );
-	$request->header( 'Accept'          => '*/*'       );
-	$request->header( 'Host'            => $host       );
-	$request->header( 'User-Agent'      => $User_agent );
 	
 	$Stats{requests}++;
 	
