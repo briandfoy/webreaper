@@ -1,4 +1,4 @@
-# Changes for webreaper
+Revision history for Perl module webreaper
 
 0.31 - Sat Sep 25 18:38:34 2004
 	* Fixed error in path processing when the script intends to stay under
