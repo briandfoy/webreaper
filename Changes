@@ -1,30 +1,30 @@
 Revision history for Perl module weblint++
 
-0.31 - Sat Sep 25 18:38:34 2004
+0.31 - 2004-09-25
 	* Fixed error in path processing when the script intends to stay under
 	a certain URL.
 
-0.30 - Sat Feb 28 08:36:30 2004
+0.30 - 2004-02-28
 	* new options for limiting requests, storing in flat dir, create zip archive
 	* lots of clean-ups and refactoring to make everything easier to read
 
-0.25 - Fri Feb 20 15:12:12 2004
+0.25 - 2004-02-20
 	* stay under path of original URL
 	* optionally sleep between requests
 	* optionally create a tar archive at end of run
 
-0.20 - Wed Dec  3 15:16:32 2003
+0.20 - 2003-12-03
 	* Referer support for all requests
 	* Cookie jar support
 	* Basic authentication support
 	* rudimentary infrastructure for restricting domains
 	* see the TO DO section in the docs for continued problems
 
-0.12 - Fri Dec 13 12:39:05 2002
+0.12 - 2002-12-13
 	* Added Test::File to prerequisites, no code changes
 
-0.11 - Wed Dec 11 16:17:28 2002
+0.11 - 2002-12-11
 	* use the latest Test::Manifest which uses the latest ExtUtils
 
-0.10 - Thu Dec  5 22:36:57 CST 2002
+0.10 - 2002-12-05
 	* first alpha release -- everything is really sketchy
