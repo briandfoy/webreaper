@@ -1,12 +1,12 @@
-# $Id$
+Revision history for Perl module weblint++
 
 0.31 - Sat Sep 25 18:38:34 2004
-* Fixed error in path processing when the script intends to stay under
-a certain URL.
+	* Fixed error in path processing when the script intends to stay under
+	a certain URL.
 
 0.30 - Sat Feb 28 08:36:30 2004
-* new options for limiting requests, storing in flat dir, create zip archive
-* lots of clean-ups and refactoring to make everything easier to read
+	* new options for limiting requests, storing in flat dir, create zip archive
+	* lots of clean-ups and refactoring to make everything easier to read
 
 0.25 - Fri Feb 20 15:12:12 2004
 	* stay under path of original URL
@@ -14,11 +14,11 @@ a certain URL.
 	* optionally create a tar archive at end of run
 
 0.20 - Wed Dec  3 15:16:32 2003
-	+ Referer support for all requests
-	+ Cookie jar support
-	+ Basic authentication support
-	+ rudimentary infrastructure for restricting domains
-	+ see the TO DO section in the docs for continued problems
+	* Referer support for all requests
+	* Cookie jar support
+	* Basic authentication support
+	* rudimentary infrastructure for restricting domains
+	* see the TO DO section in the docs for continued problems
 
 0.12 - Fri Dec 13 12:39:05 2002
 	* Added Test::File to prerequisites, no code changes
@@ -27,4 +27,4 @@ a certain URL.
 	* use the latest Test::Manifest which uses the latest ExtUtils
 
 0.10 - Thu Dec  5 22:36:57 CST 2002
-	+ first alpha release -- everything is really sketchy
+	* first alpha release -- everything is really sketchy
