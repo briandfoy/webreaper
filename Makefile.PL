@@ -1,38 +1,74 @@
-# $Id$
-use ExtUtils::MakeMaker;
+require 5.008;
+use strict;
+use warnings;
 
-require 5.006;
+my $github    = 'https://github.com/briandfoy/webreaper';
+my $main_file = 'lib/App/webreaper';
 
-eval "use Test::Manifest";
+my %WriteMakefile = (
+	'MINIMUM_PERL_VERSION' => 5.008,
 
-unless( $@ )
-	{
-	*ExtUtils::MM_Any::test_via_harness = sub
-	{
-    my($self, $perl, $tests) = @_;
-
-    return qq|\t$perl "-MTest::Manifest" | .
-           qq|"-e" "run_t_manifest(\$(TEST_VERBOSE), '\$(INST_LIB)', | .
-           qq|'\$(INST_ARCHLIB)')"\n|;
-	}
-	}
-
-WriteMakefile(
     'NAME'		    => 'webreaper',
-	'ABSTRACT'      => 'Scrape entire websites',
-	'VERSION'       => '0.31',
+	'ABSTRACT_FROM' => $main_file,
+	'VERSION_FROM'  => $main_file,
 	'LICENSE'		=> 'perl',
 	'AUTHOR'		=> 'brian d foy <bdfoy@cpan.org>',
-	
-	'EXE_FILES' =>  [ 'webreaper' ],
-	    	
+
+	'CONFIGURE_REQUIRES' => {
+		'ExtUtils::MakeMaker' => '6.64',
+		},
+
+	'BUILD_REQUIRES' => {
+		},
+
+	'TEST_REQUIRES' => {
+		'Test::More' => '0.94',
+		},
+
 	'PREREQ_PM' => {
 		'HTML::SimpleLinkExtor' => '0',
 		},
 
+	'META_MERGE' => {
+		'meta-spec' => { version => 2 },
+		resources => {
+			repository => {
+				type => 'git',
+				url  => "$github.git",
+				web  => $github,
+				},
+			bugtraker => {
+				web    => "$github/issues",
+				},
+			homepage => $github,
+			},
+		},
+
+	'EXE_FILES' =>  [ 'webreaper' ],
+	    	
 	'MAN1PODS' => {
 		'webreaper' => '$(INST_MAN1DIR)/webreaper.1',
 		},
 		
 	clean => { FILES => '*.bak webreaper-*' },
 	);
+
+sub arguments { \%WriteMakefile }
+
+do_it() unless caller;
+sub do_it {
+	require File::Spec;
+	my $MM ='ExtUtils::MakeMaker';
+	my $MM_version =
+		eval{ "$MM " . $WriteMakefile{'CONFIGURE_REQUIRES'}{'ExtUtils::MakeMaker'} }
+			//
+		"$MM 6.64";
+	eval "use $MM_version";
+	eval "use Test::Manifest 1.21" 
+		if -e File::Spec->catfile( qw(t test_manifest) );
+	WriteMakefile( %WriteMakefile );
+	}
+
+
+no warnings;
+__PACKAGE__;
