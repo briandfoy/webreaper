@@ -2,13 +2,16 @@ require 5.008;
 use strict;
 use warnings;
 
+use File::Spec::Functions qw(catfile);
+
+my $module    = 'App::webreaper';
 my $github    = 'https://github.com/briandfoy/webreaper';
-my $main_file = 'lib/App/webreaper';
+my $main_file = catfile( 'lib', split /::/, "$module.pm" );
 
 my %WriteMakefile = (
 	'MINIMUM_PERL_VERSION' => 5.008,
 
-    'NAME'		    => 'webreaper',
+    'NAME'		    => $module,
 	'ABSTRACT_FROM' => $main_file,
 	'VERSION_FROM'  => $main_file,
 	'LICENSE'		=> 'perl',
