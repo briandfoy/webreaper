@@ -56,7 +56,7 @@ my %WriteMakefile = (
 		'webreaper' => '$(INST_MAN1DIR)/webreaper.1',
 		},
 		
-	clean => { FILES => '*.bak webreaper-*' },
+	clean => { FILES => "$dist-*" },
 	);
 
 sub arguments { \%WriteMakefile }
