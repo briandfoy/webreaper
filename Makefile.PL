@@ -13,7 +13,7 @@ my $github    = 'https://github.com/briandfoy/webreaper';
 my $main_file = catfile( 'lib', split /::/, "$module.pm" );
 
 my %WriteMakefile = (
-	'MINIMUM_PERL_VERSION' => 5.010,
+	'MIN_PERL_VERSION' => '5.010',
 
     'NAME'		    => $module,
 	'ABSTRACT_FROM' => $main_file,
