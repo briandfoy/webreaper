@@ -251,7 +251,7 @@ brian d foy, E<lt>bdfoy@cpan.orgE<gt>
 
 Copyright 2003-2018, brian d foy, All rights reserved.
 
-You may use this program under the same terms as Perl itself.
+You may use this program under the terms as the Artistic License 2.0.
 
 =cut
 
