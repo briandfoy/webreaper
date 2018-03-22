@@ -249,7 +249,7 @@ brian d foy, E<lt>bdfoy@cpan.orgE<gt>
 
 =head1 COPYRIGHT
 
-Copyright 2003-4, brian d foy, All rights reserved.
+Copyright 2003-2018, brian d foy, All rights reserved.
 
 You may use this program under the same terms as Perl itself.
 
