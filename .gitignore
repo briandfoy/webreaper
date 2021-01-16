@@ -2,7 +2,8 @@ MYMETA*
 Makefile
 Makefile.old
 *.bak
-*.icould
+*.icloud
+
 MANIFEST*[123456789]
 Changes*[123456789]
 
